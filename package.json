@@ -1,0 +1,16 @@
+{
+  "name": "promise-plumbing",
+  "version": "1.0.0",
+  "description": "Extra control flow for Promises",
+  "main": "index.js",
+  "scripts": {},
+  "author": "Bill Granfield <bill.granfield@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "bluebird": "^3.5.0",
+    "ramda": "^0.23.0"
+  },
+  "devDependencies": {
+    "jest": "^20.0.0"
+  }
+}
