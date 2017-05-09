@@ -36,8 +36,6 @@ const _preconditions = (...conditions) => f => (...args) => {
     R.last,
     R.nth(R.__, conditions),
     R.findIndex(R.not)
-    // R.findIndex(R.complement(Boolean))
-    // R.findIndex(R.compose(R.not, Boolean))
   )(results))
 }
 
