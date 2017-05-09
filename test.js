@@ -93,6 +93,22 @@ describe('whilst', () => {
   })
 })
 
+describe('doWhilst', () => {
+  it('calls the operation exactly once', () =>
+    PP.doWhilst(
+      () => 'something',
+      R.F
+    ).then(result => expect(result).toEqual([ 'something' ]))
+  )
+
+  it('calls the operation twice', () =>
+    PP.doWhilst(
+      R.length,
+      R.compose(R.lt(R.__, 2), R.length)
+    ).then(result => expect(result).toEqual([ 0, 1 ]))
+  )
+})
+
 describe('pipe', () => {
   it('passes the result of each step to the next step', () =>
     PP.pipe(
@@ -129,6 +145,12 @@ describe('pipe', () => {
 })
 
 describe('retry', () => {
+  it('throws if times is a non-number', () => {
+    expect(() => PP.retry()).toThrow()
+    expect(() => PP.retry(null, R.identity)).toThrow()
+    expect(() => PP.retry('5', R.identity)).toThrow()
+  })
+
   it('attempts the operation times times before rejecting', () => {
     let count = 0
     return PP.retry(
