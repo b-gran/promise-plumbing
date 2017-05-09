@@ -111,25 +111,28 @@ const _isHeadFailure = R.compose(R.equals(_failure), R.head)
 const retry = _preconditions(
   _pc(R.propSatisfies(R.is(Number), 'times'), 'times must be a number')
 )(
-  ({ times, interval = 0 }, task) => doWhilst(
-    // Do the task and always have a fulfilment tuple of
-    //    [ maybeFailed, result ]
-    // where maybeFailed is the failure symbol if the operation failed.
-    // This way, the task can return an Error or a falsey or nil value.
-    () => task()
-      .then(result => [ null, result ])
-      .catch(err => [ _failure, err ]),
+  ({ times, interval = 0 }, task) => {
+    const wrappedTask = wrap(task)
+    return doWhilst(
+      // Do the task and always have a fulfilment tuple of
+      //    [ maybeFailed, result ]
+      // where maybeFailed is the failure symbol if the operation failed.
+      // This way, the task can return an Error or a falsey or nil value.
+      () => wrappedTask()
+        .then(result => [ null, result ])
+        .catch(err => [ _failure, err ]),
 
-    // Continue while the latest operation failed and we
-    // haven't done it "times" times
-    R.allPass([
-      R.compose(_isHeadFailure, R.last),
-      R.compose(R.gt(times), R.length)
-    ])
-  ).then(R.compose(
-    R.ifElse(_isHeadFailure, R.compose(_reject, R.last), R.last),
-    R.last
-  ))
+      // Continue while the latest operation failed and we
+      // haven't done it "times" times
+      R.allPass([
+        R.compose(_isHeadFailure, R.last),
+        R.compose(R.gt(times), R.length)
+      ])
+    ).then(R.compose(
+      R.ifElse(_isHeadFailure, R.compose(_reject, R.last), R.last),
+      R.last
+    ))
+  }
 )
 module.exports.retry = retry
 

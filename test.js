@@ -163,6 +163,41 @@ describe('retry', () => {
         expect(err).toBe('failure')
       })
   })
+
+  it('stops running the task after it succeeds', () => {
+    const succeedOnThirdTry = (() => {
+      let failures = 0
+      return () => (++failures) < 2
+        ? Promise.reject('failure')
+        : Promise.resolve('success')
+    })()
+
+    let count = 0
+    return PP.retry(
+      { times: 5 },
+      () => (count++, succeedOnThirdTry())
+    )
+      .catch(() => expect(false))
+      .then(result => {
+        expect(result).toBe('success')
+        expect(count).toBe(2)
+      })
+  })
+
+  it('works with synchronous tasks', () => {
+    const _fail = msg => { throw new Error(msg) }
+    let count = 0
+    return PP.retry(
+      { times: 5 },
+      x => (count++, _fail('failure'))
+    )
+      .then(() => expect(false))
+      .catch(err => {
+        expect(count).toBe(5)
+        expect(err).toBeInstanceOf(Error)
+        expect(err.message).toBe('failure')
+      })
+  })
 })
 
 const _not = R.ifElse(R.identity, R.always(' not'), R.always(''))
