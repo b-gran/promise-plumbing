@@ -1,6 +1,16 @@
 const PP = require('./index')
 const R = require('ramda')
 
+expect.extend({
+  toBeWithinError (received, expected, error) {
+    const pass = Math.abs(received - expected) <= error
+    return {
+      message: () => `expected ${received} to${_not(pass)} be within ${error} of ${expected}`,
+      pass: pass
+    }
+  }
+})
+
 describe('wrap', () => {
   const value = {}
   const primitive = PP.wrap(() => value)
@@ -184,6 +194,28 @@ describe('retry', () => {
       })
   })
 
+  it('delays based on the interval function', () => {
+    // Exponential backoff function
+    const interval = x => Math.pow(2, x) * 15
+    const times = 7
+    const expectedTotalDelay = R.sum(R.map(
+      R.compose(interval, R.add(1)),
+      R.times(R.identity, times - 1)
+    ))
+
+    const now = Date.now()
+
+    return PP.retry(
+      { times, interval },
+      x => Promise.reject('failure')
+    )
+      .then(() => expect(false))
+      .catch(err => {
+        expect(Date.now() - now).toBeWithinError(expectedTotalDelay, 50)
+        expect(err).toBe('failure')
+      })
+  })
+
   it('works with synchronous tasks', () => {
     const _fail = msg => { throw new Error(msg) }
     let count = 0
@@ -201,16 +233,6 @@ describe('retry', () => {
 })
 
 const _not = R.ifElse(R.identity, R.always(' not'), R.always(''))
-
-expect.extend({
-  toBeWithinError (received, expected, error) {
-    const pass = Math.abs(received - expected) <= error
-    return {
-      message: () => `expected ${received} to${_not(pass)} be within ${error} of ${expected}`,
-      pass: pass
-    }
-  }
-})
 
 describe('delay', () => {
   it('waits for the specified duration', () => {

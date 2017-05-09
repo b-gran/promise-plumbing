@@ -47,6 +47,17 @@ const wrap = R.compose(
 )
 module.exports.wrap = wrap
 
+// A Promise that is fulfilled after some number of milliseconds.
+const delay = _preconditions(
+  _pc(R.is(Number), 'the duration must be a number')
+)(
+  duration => new Promise(resolve => setTimeout(
+    () => resolve(),
+    R.is(Number, duration) ? Math.max(duration, 0) : 0
+  ))
+)
+module.exports.delay = delay
+
 // Passes a MaybePromise to a list of branching functions and resolves
 // to the list of branch results. The branching functions can be Promise-returning
 // or synchronous, and the value can either be a Promise or any other value.
@@ -111,14 +122,24 @@ const _isHeadFailure = R.compose(R.equals(_failure), R.head)
 const retry = _preconditions(
   _pc(R.propSatisfies(R.is(Number), 'times'), 'times must be a number')
 )(
-  ({ times, interval = 0 }, task) => {
-    const wrappedTask = wrap(task)
+  ({ times, interval }, task) => {
+    const backoff = interval ?
+      // If an interval is provided, do the operation instantly on
+      // the 0th try and delay for every other try.
+      R.ifElse(
+        R.equals(0),
+        R.always(wrap),
+        nthTry => f => () => delay(interval(nthTry)).then(f)
+      ) :
+      // If no interval is provided, never delay.
+      R.always(wrap)
+
     return doWhilst(
       // Do the task and always have a fulfilment tuple of
       //    [ maybeFailed, result ]
       // where maybeFailed is the failure symbol if the operation failed.
       // This way, the task can return an Error or a falsey or nil value.
-      () => wrappedTask()
+      x => backoff(R.length(x))(task)()
         .then(result => [ null, result ])
         .catch(err => [ _failure, err ]),
 
@@ -135,14 +156,3 @@ const retry = _preconditions(
   }
 )
 module.exports.retry = retry
-
-// A Promise that is fulfilled after some number of milliseconds.
-const delay = _preconditions(
-  _pc(R.is(Number), 'the duration must be a number')
-)(
-  duration => new Promise(resolve => setTimeout(
-    () => resolve(),
-    R.is(Number, duration) ? Math.max(duration, 0) : 0
-  ))
-)
-module.exports.delay = delay
