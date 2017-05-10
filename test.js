@@ -11,6 +11,8 @@ expect.extend({
   }
 })
 
+const _pow = R.curry(Math.pow)
+
 describe('wrap', () => {
   const value = {}
   const primitive = PP.wrap(() => value)
@@ -196,7 +198,7 @@ describe('retry', () => {
 
   it('delays based on the interval function', () => {
     // Exponential backoff function
-    const interval = x => Math.pow(2, x) * 15
+    const interval = R.compose(R.multiply(15), _pow(2))
     const times = 7
     const expectedTotalDelay = R.sum(R.map(
       R.compose(interval, R.add(1)),
