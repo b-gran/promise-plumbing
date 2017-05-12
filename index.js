@@ -1,59 +1,18 @@
 const R = require('ramda')
+const L = require('./lib')
 const assert = require('assert')
-
-// Given a list of arguments, returns a function that accepts a function
-// and ultimately returns the result of calling the function with
-// the original arguments.
-const _callWith = (...args) => f => f(...args)
-
-// Promise.resolve and Promise.reject bound to Promise
-const _resolve = Promise.resolve.bind(Promise)
-const _reject = Promise.reject.bind(Promise)
-
-// Creates something Symbol-like if the environment doesn't have Symbols
-const _symbolFallback = R.is(Function, Symbol) ? Symbol : () => Object.freeze({})
-
-// For debugging, just console.log
-const _l = R.bind(console.log, console)
-
-const _pc = (predicate, message) => [ predicate, message ]
-const _preconditions = (...conditions) => f => {
-  const callF = (...args) => {
-    // Call each precondition with the arguments passed to the function
-    const results = R.map(
-      R.compose(_callWith(...args), R.head),
-      conditions
-    )
-
-    // If all the preconditions passed, call the function
-    if (R.all(Boolean, results)) {
-      return f(...args)
-    }
-
-    // Otherwise throw an Error whose message is the failure
-    // message of the first failed precondition
-    throw new Error(R.compose(
-      R.defaultTo('failed precondition'),
-      R.last,
-      R.nth(R.__, conditions),
-      R.findIndex(R.not)
-    )(results))
-  }
-  Object.defineProperty(callF, 'length', { value: f.length })
-  return callF
-}
 
 // Given a function f that may or may not return a Promise, returns a Promise-returning
 // function which returns a Promise that resolves to the return value of f
 const wrap = R.compose(
-  R.tryCatch(R.__, _reject),
-  R.converge(R.compose, [ R.always(_resolve), R.identity ])
+  R.tryCatch(R.__, L.reject),
+  R.converge(R.compose, [ R.always(L.resolve), R.identity ])
 )
 module.exports.wrap = wrap
 
 // A Promise that is fulfilled after some number of milliseconds.
-const delay = _preconditions(
-  _pc(R.is(Number), 'the duration must be a number')
+const delay = L.preconditions(
+  L.pc(R.is(Number), 'the duration must be a number')
 )(
   duration => new Promise(resolve => setTimeout(
     () => resolve(),
@@ -67,7 +26,7 @@ module.exports.delay = delay
 // or synchronous, and the value can either be a Promise or any other value.
 const branch = (...branches) => valueOrPromise => Promise.resolve(valueOrPromise)
   .then(fulfilment => Promise.all(R.map(
-    _callWith(fulfilment),
+    L.callWith(fulfilment),
     branches
   )))
 module.exports.branch = branch
@@ -77,7 +36,7 @@ const _whilstRec = (test, operation, results) => {
     .then(R.ifElse(
       R.identity,
       () => operation(results)
-          .then(result => _whilstRec(test, operation, [ ...results, result ])),
+        .then(result => _whilstRec(test, operation, [...results, result])),
       R.always(results)
     ))
 }
@@ -108,7 +67,7 @@ module.exports.doWhilst = doWhilst
 // be resolved in a non-deterministic order before being passed to
 // the input functions.
 const pipe = (...functions) => (...args) => Promise
-  .all(R.map(_resolve, args))
+  .all(R.map(L.resolve, args))
   .then(resolvedArguments => R.reduce(
     (promise, step) => promise.then(step),
     wrap(R.head(functions))(...resolvedArguments),
@@ -116,15 +75,15 @@ const pipe = (...functions) => (...args) => Promise
   ))
 module.exports.pipe = pipe
 
-const _failure = _symbolFallback('failure')
+const _failure = L.symbolFallback('failure')
 const _isHeadFailure = R.compose(R.equals(_failure), R.head)
 
 // Retry an operation some number of times before reporting failure.
 // An operation "fails" if either
 //   1) the operation is synchronous and it throws
 //   2) the operation is a Promise and it is rejected
-const retry = _preconditions(
-  _pc(R.propSatisfies(R.is(Number), 'times'), 'times must be a number')
+const retry = L.preconditions(
+  L.pc(R.propSatisfies(R.is(Number), 'times'), 'times must be a number')
 )(
   ({ times, interval }, task) => {
     const backoff = interval ?
@@ -154,25 +113,22 @@ const retry = _preconditions(
         R.compose(R.gt(times), R.length)
       ])
     ).then(R.compose(
-      R.ifElse(_isHeadFailure, R.compose(_reject, R.last), R.last),
+      R.ifElse(_isHeadFailure, R.compose(L.reject, R.last), R.last),
       R.last
     ))
   }
 )
 module.exports.retry = retry
 
-const _isStringRepresentable = R.anyPass(R.map(R.unary(R.is), [ String, Number, Symbol ]))
-const _isDefined = R.complement(R.isNil)
-
 // A helper function that binds a function property of an object to the object.
 const bindOwn = R.curry(
-  _preconditions(
-    _pc(
-      R.compose(_isStringRepresentable, R.nthArg(0)),
+  L.preconditions(
+    L.pc(
+      R.compose(L.isStringRepresentable, R.nthArg(0)),
       'property must be a string, number, or Symbol'
     ),
-    _pc(R.compose(_isDefined, R.nthArg(1)), 'the object must be non-nil'),
-    _pc(
+    L.pc(R.compose(L.isDefined, R.nthArg(1)), 'the object must be non-nil'),
+    L.pc(
       R.converge(
         R.call,
         [ R.compose(R.prop, R.nthArg(0)), R.nthArg(1) ]
