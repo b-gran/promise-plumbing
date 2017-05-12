@@ -1,6 +1,9 @@
 const PP = require('./index')
 const R = require('ramda')
 
+// Fail a test
+const fail = () => expect(false).toBeTruthy()
+
 expect.extend({
   toBeWithinError (received, expected, error) {
     const pass = Math.abs(received - expected) <= error
@@ -32,9 +35,8 @@ describe('wrap', () => {
 
   it('handles synchronous throwing', () => {
     const err = new Error('failure')
-    expect(PP.wrap(() => {
-      throw err
-    })()).rejects.toBe(err)
+    expect(PP.wrap(() => { throw err })())
+      .rejects.toBe(err)
   })
 })
 
@@ -57,7 +59,7 @@ describe('branch', () => {
   it('resolves the initial value if it is a Promise', () =>
     PP.branch(R.identity)(
       new Promise(resolve => setTimeout(() => resolve(value), 10))
-    ).then(([ x ]) => expect(x).toBe(value))
+    ).then(([x]) => expect(x).toBe(value))
   )
 
   it('has an array of fulfillment values as its ultimate fulfillment value', () =>
@@ -65,59 +67,68 @@ describe('branch', () => {
       x => new Promise(resolve => resolve(x + 1)),
       x => Promise.resolve(x * 2),
       x => x - 3
-    )(Promise.resolve(5)).then(result => expect(result).toEqual([ 6, 10, 2 ])),
+    )(Promise.resolve(5))
+      .then(result => expect(result).toEqual([6, 10, 2])),
   )
 })
 
 describe('whilst', () => {
+  const lengthLt5 = R.compose(R.gt(5), R.length)
+  const lengthPlus1 = R.compose(R.add(1), R.length)
+
   it('does synchronous operation while the synchronous test returns true', () => {
-    return PP.whilst(
-      x => x.length < 5,
-      x => x.length + 1
-    ).then(result => expect(result).toEqual([ 1, 2, 3, 4, 5 ]))
+    return PP.whilst(lengthLt5, lengthPlus1)
+      .then(result => expect(result).toEqual([1, 2, 3, 4, 5]))
   })
 
   it('does asynchronous operation while the asynchronous test returns true', () => {
     return PP.whilst(
-      x => PP.delay(100).then(R.always(x.length < 5)),
-      x => PP.delay(100).then(R.always(x.length + 1))
-    ).then(result => expect(result).toEqual([ 1, 2, 3, 4, 5 ]))
+      x => PP.delay(100).then(R.always(lengthLt5(x))),
+      x => PP.delay(100).then(R.always(lengthPlus1(x)))
+    ).then(result => expect(result).toEqual([1, 2, 3, 4, 5]))
   })
 
+  const succeedWhileLengthLt3 = R.either(
+    R.compose(R.lt(R.__, 3), R.length),
+    R.compose(PP.bindOwn('reject', Promise), R.length)
+  )
+
   it('exits immediately if the operation rejects', () => {
-    let count = 0
-    return PP.whilst(
-      R.always(true),
-      x => x.length > 2
-        ? Promise.reject(count)
-        : (count++, x.length + 1)
-    ).catch(finalCount => expect(finalCount).toBe(3))
+    const mockTest = jest.fn(R.T)
+    const succeedFirstThree = jest.fn(succeedWhileLengthLt3)
+    return PP.whilst(mockTest, succeedFirstThree)
+      .then(fail)
+      .catch(finalCount => {
+        expect(finalCount).toBe(3)
+        expect(mockTest).toHaveBeenCalledTimes(4)
+        expect(succeedFirstThree).toHaveBeenCalledTimes(4)
+      })
   })
 
   it('exits immediately if the test rejects', () => {
-    let count = 0
-    return PP.whilst(
-      x => x.length < 3
-        ? (count++, true)
-        : Promise.reject(count),
-      x => x.length + 1
-    ).catch(finalCount => expect(finalCount).toBe(3))
+    const succeedFirstThree = jest.fn(succeedWhileLengthLt3)
+    const mockOperation = jest.fn()
+    return PP.whilst(succeedFirstThree, mockOperation)
+      .then(fail)
+      .catch(finalCount => {
+        expect(finalCount).toBe(3)
+        expect(succeedFirstThree).toHaveBeenCalledTimes(4)
+        expect(mockOperation).toHaveBeenCalledTimes(3)
+      })
   })
 })
 
 describe('doWhilst', () => {
   it('calls the operation exactly once', () =>
-    PP.doWhilst(
-      () => 'something',
-      R.F
-    ).then(result => expect(result).toEqual([ 'something' ]))
+    PP.doWhilst(() => 'something', R.F)
+      .then(result => expect(result).toEqual(['something']))
   )
 
   it('calls the operation twice', () =>
     PP.doWhilst(
       R.length,
       R.compose(R.lt(R.__, 2), R.length)
-    ).then(result => expect(result).toEqual([ 0, 1 ]))
+    ).then(result => expect(result).toEqual([0, 1]))
   )
 })
 
@@ -126,7 +137,7 @@ describe('pipe', () => {
     PP.pipe(
       x => x + 1,
       x => PP.delay(20).then(R.always(x * 2)),
-      x => x - 3,
+      x => x - 3
     )(5).then(result => expect(result).toBe(9))
   )
 
@@ -149,9 +160,9 @@ describe('pipe', () => {
 
   it('exits after the first failed Promise', () =>
     expect(PP.pipe(
-      () => true,
+      R.T,
       () => Promise.reject('failure'),
-      () => expect(false)
+      fail
     )()).rejects.toBe('failure')
   )
 })
@@ -164,36 +175,31 @@ describe('retry', () => {
   })
 
   it('attempts the operation times times before rejecting', () => {
-    let count = 0
+    const alwaysReject = jest.fn(R.always(Promise.reject('failure')))
     return PP.retry(
       { times: 5 },
-      x => (count++, Promise.reject('failure'))
-    )
-      .then(() => expect(false))
-      .catch(err => {
-        expect(count).toBe(5)
-        expect(err).toBe('failure')
-      })
+      alwaysReject
+    ).then(fail).catch(err => {
+      expect(alwaysReject).toHaveBeenCalledTimes(5)
+      expect(err).toBe('failure')
+    })
   })
 
   it('stops running the task after it succeeds', () => {
-    const succeedOnThirdTry = (() => {
+    const succeedOnThirdTry = jest.fn((() => {
       let failures = 0
       return () => (++failures) < 2
         ? Promise.reject('failure')
         : Promise.resolve('success')
-    })()
+    })())
 
-    let count = 0
     return PP.retry(
       { times: 5 },
-      () => (count++, succeedOnThirdTry())
-    )
-      .catch(() => expect(false))
-      .then(result => {
-        expect(result).toBe('success')
-        expect(count).toBe(2)
-      })
+      succeedOnThirdTry
+    ).then(result => {
+      expect(result).toBe('success')
+      expect(succeedOnThirdTry).toHaveBeenCalledTimes(2)
+    })
   })
 
   it('delays based on the interval function', () => {
@@ -210,27 +216,22 @@ describe('retry', () => {
     return PP.retry(
       { times, interval },
       x => Promise.reject('failure')
-    )
-      .then(() => expect(false))
-      .catch(err => {
-        expect(Date.now() - now).toBeWithinError(expectedTotalDelay, 50)
-        expect(err).toBe('failure')
-      })
+    ).then(fail).catch(err => {
+      expect(Date.now() - now).toBeWithinError(expectedTotalDelay, 50)
+      expect(err).toBe('failure')
+    })
   })
 
   it('works with synchronous tasks', () => {
-    const _fail = msg => { throw new Error(msg) }
-    let count = 0
+    const alwaysThrow = jest.fn(msg => { throw new Error(msg) })
     return PP.retry(
       { times: 5 },
-      x => (count++, _fail('failure'))
-    )
-      .then(() => expect(false))
-      .catch(err => {
-        expect(count).toBe(5)
-        expect(err).toBeInstanceOf(Error)
-        expect(err.message).toBe('failure')
-      })
+      x => alwaysThrow('failure')
+    ).then(fail).catch(err => {
+      expect(alwaysThrow).toHaveBeenCalledTimes(5)
+      expect(err).toBeInstanceOf(Error)
+      expect(err.message).toBe('failure')
+    })
   })
 })
 
@@ -242,6 +243,38 @@ describe('delay', () => {
     const duration = 500
     return PP.delay(duration)
       .then(() => expect(Date.now() - start).toBeWithinError(duration, 10))
+  })
+})
+
+describe('bindOwn', () => {
+  const value = {}
+  const func = function () { return this.bar }
+  const object = {
+    bar: value,
+    foo: func
+  }
+
+  it('is curried', () =>
+    expect(PP.bindOwn('foo')(object)()).toBe(value)
+  )
+
+  it('throws if the property isn\'t a string, number or Symbol', () => {
+    expect(() => PP.bindOwn(undefined, {})).toThrow()
+    expect(() => PP.bindOwn({}, {})).toThrow()
+  })
+
+  it('throws if the object is nil', () => {
+    expect(() => PP.bindOwn('foo', null)).toThrow()
+    expect(() => PP.bindOwn('foo', undefined)).toThrow()
+  })
+
+  it('throws if the property is a non-function', () =>
+    expect(() => PP.bindOwn('foo', { foo: 5 })).toThrow()
+  )
+
+  it('binds the property to the object', () => {
+    const bound = PP.bindOwn('foo', object)
+    expect(bound()).toBe(value)
   })
 })
 
