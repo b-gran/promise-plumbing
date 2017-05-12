@@ -17,26 +17,30 @@ const _symbolFallback = R.is(Function, Symbol) ? Symbol : () => Object.freeze({}
 const _l = R.bind(console.log, console)
 
 const _pc = (predicate, message) => [ predicate, message ]
-const _preconditions = (...conditions) => f => (...args) => {
-  // Call each precondition with the arguments passed to the function
-  const results = R.map(
-    R.compose(_callWith(...args), R.head),
-    conditions
-  )
+const _preconditions = (...conditions) => f => {
+  const callF = (...args) => {
+    // Call each precondition with the arguments passed to the function
+    const results = R.map(
+      R.compose(_callWith(...args), R.head),
+      conditions
+    )
 
-  // If all the preconditions passed, call the function
-  if (R.all(Boolean, results)) {
-    return f(...args)
+    // If all the preconditions passed, call the function
+    if (R.all(Boolean, results)) {
+      return f(...args)
+    }
+
+    // Otherwise throw an Error whose message is the failure
+    // message of the first failed precondition
+    throw new Error(R.compose(
+      R.defaultTo('failed precondition'),
+      R.last,
+      R.nth(R.__, conditions),
+      R.findIndex(R.not)
+    )(results))
   }
-
-  // Otherwise throw an Error whose message is the failure
-  // message of the first failed precondition
-  throw new Error(R.compose(
-    R.defaultTo('failed precondition'),
-    R.last,
-    R.nth(R.__, conditions),
-    R.findIndex(R.not)
-  )(results))
+  Object.defineProperty(callF, 'length', { value: f.length })
+  return callF
 }
 
 // Given a function f that may or may not return a Promise, returns a Promise-returning
@@ -156,3 +160,18 @@ const retry = _preconditions(
   }
 )
 module.exports.retry = retry
+
+// A helper function that binds a function property of an object to the object.
+const bindOwn = R.curry(
+  _preconditions(
+    _pc(
+      R.compose(
+        R.anyPass(R.map(R.unary(R.is), [ String, Number, Symbol ])),
+        R.nthArg(0)
+      ),
+      'property must be a string, number, or Symbol'
+    ),
+    _pc(R.compose(R.complement(R.isNil), R.nthArg(1)), 'the object must be non-nil')
+  )((property, object) => object[property].bind(object))
+)
+module.exports.bindOwn = bindOwn
