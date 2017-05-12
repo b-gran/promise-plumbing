@@ -161,17 +161,24 @@ const retry = _preconditions(
 )
 module.exports.retry = retry
 
+const _isStringRepresentable = R.anyPass(R.map(R.unary(R.is), [ String, Number, Symbol ]))
+const _isDefined = R.complement(R.isNil)
+
 // A helper function that binds a function property of an object to the object.
 const bindOwn = R.curry(
   _preconditions(
     _pc(
-      R.compose(
-        R.anyPass(R.map(R.unary(R.is), [ String, Number, Symbol ])),
-        R.nthArg(0)
-      ),
+      R.compose(_isStringRepresentable, R.nthArg(0)),
       'property must be a string, number, or Symbol'
     ),
-    _pc(R.compose(R.complement(R.isNil), R.nthArg(1)), 'the object must be non-nil')
+    _pc(R.compose(_isDefined, R.nthArg(1)), 'the object must be non-nil'),
+    _pc(
+      R.converge(
+        R.call,
+        [ R.compose(R.prop, R.nthArg(0)), R.nthArg(1) ]
+      ),
+      'the property must be a function'
+    )
   )((property, object) => object[property].bind(object))
 )
 module.exports.bindOwn = bindOwn
