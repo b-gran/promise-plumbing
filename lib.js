@@ -31,29 +31,39 @@ module.exports.pc = pc
 
 // Passes function arguments through a list of predicates
 const preconditions = (...conditions) => f => {
-  const callF = (...args) => {
-    // Call each precondition with the arguments passed to the function
-    const results = R.map(
-      R.compose(callWith(...args), R.head),
+  const callConditionsWithArgs2 = (...args) => {
+    let index = 0
+
+    while (index < conditions.length) {
+      const condition = conditions[index]
+      if (!condition[0](...args)) {
+        return failCondition(condition)
+      }
+      index += 1
+    }
+
+    return f(...args)
+  }
+
+  const callConditionsWithArgs = (...args) => {
+    const result = R.reduce(
+      (passOrFailureMessage, condition) => (
+        passOrFailureMessage === true &&
+        (!!condition[0](...args) || condition[1] || 'failed precondition')
+      ),
+      true,
       conditions
     )
 
-    // If all the preconditions passed, call the function
-    if (R.all(Boolean, results)) {
-      return f(...args)
-    }
-
-    // Otherwise throw an Error whose message is the failure
-    // message of the first failed precondition
-    throw new Error(R.compose(
-      R.defaultTo('failed precondition'),
-      R.last,
-      R.nth(R.__, conditions),
-      R.findIndex(R.not)
-    )(results))
+    return result === true ? f(...args) : failCondition(result)
   }
-  Object.defineProperty(callF, 'length', { value: f.length })
-  return callF
+
+  Object.defineProperty(callConditionsWithArgs, 'length', { value: f.length })
+  return callConditionsWithArgs
+
+  function failCondition (condition) {
+    throw new Error(condition[1] || 'failed precondition')
+  }
 }
 module.exports.preconditions = preconditions
 
