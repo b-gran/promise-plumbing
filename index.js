@@ -31,25 +31,35 @@ const branch = (...branches) => valueOrPromise => Promise.resolve(valueOrPromise
   )))
 module.exports.branch = branch
 
-const _whilstRec = (test, operation, results) => {
-  return test(results)
-    .then(R.ifElse(
-      R.identity,
-      () => operation(results)
-        .then(result => _whilstRec(test, operation, [...results, result])),
-      R.always(results)
-    ))
-}
-
 // Does an operation while a test returns true. The test and operation can be
 // asynchronous operations. If either function rejects, exits immediately.
 const whilst = (test, operation) => {
-  return _whilstRec(
-    wrap(test),
-    wrap(operation),
-    []
-  )
+  const $test = wrap(test)
+  const $operation = wrap(operation)
+
+  return new Promise((resolve, reject) => {
+    let result = []
+    const iterator = operationGenerator()
+    iterator.next()
+
+    function * operationGenerator () {
+      try {
+        while (yield awaitPromise($test(result))) {
+          result = [ ...result, yield awaitPromise($operation(result)) ]
+        }
+      } catch (err) {
+        return reject(err)
+      }
+
+      return resolve(result)
+    }
+
+    function awaitPromise (promise) {
+      promise.then(bindOwn('next', iterator)).catch(bindOwn('throw', iterator))
+    }
+  })
 }
+
 module.exports.whilst = whilst
 
 // Does an operation while a test returns true. The test and operation can be
