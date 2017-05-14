@@ -29,15 +29,17 @@ module.exports.l = l
 const pc = (predicate, message) => [ predicate, message ]
 module.exports.pc = pc
 
+// Returns a failure message for a pc
+const failureMessage = R.either(R.last, R.always('failed precondition'))
+
 // Passes function arguments through a list of predicates
 const preconditions = (...conditions) => f => {
-  const callConditionsWithArgs2 = (...args) => {
+  const callConditionsWithArgs = (...args) => {
     let index = 0
-
-    while (index < conditions.length) {
+    while (index < R.length(conditions)) {
       const condition = conditions[index]
       if (!condition[0](...args)) {
-        return failCondition(condition)
+        throw new Error(failureMessage(condition))
       }
       index += 1
     }
@@ -45,29 +47,12 @@ const preconditions = (...conditions) => f => {
     return f(...args)
   }
 
-  const callConditionsWithArgs = (...args) => {
-    const result = R.reduce(
-      (passOrFailureMessage, condition) => (
-        passOrFailureMessage === true &&
-        (!!condition[0](...args) || condition[1] || 'failed precondition')
-      ),
-      true,
-      conditions
-    )
-
-    return result === true ? f(...args) : failCondition(result)
-  }
-
   Object.defineProperty(callConditionsWithArgs, 'length', { value: f.length })
   return callConditionsWithArgs
-
-  function failCondition (condition) {
-    throw new Error(condition[1] || 'failed precondition')
-  }
 }
 module.exports.preconditions = preconditions
 
-const isStringRepresentable = R.anyPass(R.map(R.unary(R.is), [ String, Number, Symbol ]))
+const isStringRepresentable = R.anyPass(R.map(R.is, [ String, Number, Symbol ]))
 module.exports.isStringRepresentable = isStringRepresentable
 
 const isDefined = R.complement(R.isNil)
