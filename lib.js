@@ -57,3 +57,18 @@ module.exports.isStringRepresentable = isStringRepresentable
 
 const isDefined = R.complement(R.isNil)
 module.exports.isDefined = isDefined
+
+const _isPropertyEnumerable = R.curry((prop, object) => (
+  !R.isNil(object) &&
+  prop in object &&
+  Object.getOwnPropertyDescriptor(object, prop).enumerable
+))
+
+const setProp = R.curry((prop, value, object) => {
+  Object.defineProperty(object, prop, {
+    value: value,
+    enumerable: !R.has(prop, object) || _isPropertyEnumerable(prop, object)
+  })
+  return object
+})
+module.exports.setProp = setProp

@@ -1,4 +1,4 @@
-const PP = require('./index')
+const P = require('./index')
 const R = require('ramda')
 
 // Fail a test
@@ -18,8 +18,8 @@ const _pow = R.curry(Math.pow)
 
 describe('wrap', () => {
   const value = {}
-  const primitive = PP.wrap(() => value)
-  const promise = PP.wrap(() => Promise.resolve(value))
+  const primitive = P.wrap(() => value)
+  const promise = P.wrap(() => Promise.resolve(value))
 
   it('returns a Promise-returning Function', () => {
     expect(primitive).toBeInstanceOf(Function)
@@ -35,7 +35,7 @@ describe('wrap', () => {
 
   it('handles synchronous throwing', () => {
     const err = new Error('failure')
-    expect(PP.wrap(() => { throw err })())
+    return expect(P.wrap(() => { throw err })())
       .rejects.toBe(err)
   })
 })
@@ -44,26 +44,26 @@ describe('branch', () => {
   const value = {}
 
   it('is a variadic function-returning function', () => {
-    expect(PP.branch).toBeInstanceOf(Function)
-    expect(PP.branch.length).toBe(0)
-    expect(PP.branch(R.identity)).toBeInstanceOf(Function)
+    expect(P.branch).toBeInstanceOf(Function)
+    expect(P.branch.length).toBe(0)
+    expect(P.branch(R.identity)).toBeInstanceOf(Function)
   })
 
   it('passes the initial value to each branching function', () =>
-    PP.branch(
+    P.branch(
       x => expect(x).toBe(value),
       x => expect(x).toBe(value)
     )(value)
   )
 
   it('resolves the initial value if it is a Promise', () =>
-    PP.branch(R.identity)(
+    P.branch(R.identity)(
       new Promise(resolve => setTimeout(() => resolve(value), 10))
     ).then(([x]) => expect(x).toBe(value))
   )
 
   it('has an array of fulfillment values as its ultimate fulfillment value', () =>
-    PP.branch(
+    P.branch(
       x => new Promise(resolve => resolve(x + 1)),
       x => Promise.resolve(x * 2),
       x => x - 3
@@ -77,26 +77,26 @@ describe('whilst', () => {
   const lengthPlus1 = R.compose(R.add(1), R.length)
 
   it('does synchronous operation while the synchronous test returns true', () => {
-    return PP.whilst(lengthLt5, lengthPlus1)
+    return P.whilst(lengthLt5, lengthPlus1)
       .then(result => expect(result).toEqual([1, 2, 3, 4, 5]))
   })
 
   it('does asynchronous operation while the asynchronous test returns true', () => {
-    return PP.whilst(
-      x => PP.delay(100).then(R.always(lengthLt5(x))),
-      x => PP.delay(100).then(R.always(lengthPlus1(x)))
+    return P.whilst(
+      x => P.delay(100).then(R.always(lengthLt5(x))),
+      x => P.delay(100).then(R.always(lengthPlus1(x)))
     ).then(result => expect(result).toEqual([1, 2, 3, 4, 5]))
   })
 
   const succeedWhileLengthLt3 = R.either(
     R.compose(R.lt(R.__, 3), R.length),
-    R.compose(PP.bindOwn('reject', Promise), R.length)
+    R.compose(P.bindOwn('reject', Promise), R.length)
   )
 
   it('exits immediately if the operation rejects', () => {
     const mockTest = jest.fn(R.T)
     const succeedFirstThree = jest.fn(succeedWhileLengthLt3)
-    return PP.whilst(mockTest, succeedFirstThree)
+    return P.whilst(mockTest, succeedFirstThree)
       .then(fail)
       .catch(finalCount => {
         expect(finalCount).toBe(3)
@@ -108,7 +108,7 @@ describe('whilst', () => {
   it('exits immediately if the test rejects', () => {
     const succeedFirstThree = jest.fn(succeedWhileLengthLt3)
     const mockOperation = jest.fn()
-    return PP.whilst(succeedFirstThree, mockOperation)
+    return P.whilst(succeedFirstThree, mockOperation)
       .then(fail)
       .catch(finalCount => {
         expect(finalCount).toBe(3)
@@ -120,12 +120,12 @@ describe('whilst', () => {
 
 describe('doWhilst', () => {
   it('calls the operation exactly once', () =>
-    PP.doWhilst(() => 'something', R.F)
+    P.doWhilst(() => 'something', R.F)
       .then(result => expect(result).toEqual(['something']))
   )
 
   it('calls the operation twice', () =>
-    PP.doWhilst(
+    P.doWhilst(
       R.length,
       R.compose(R.lt(R.__, 2), R.length)
     ).then(result => expect(result).toEqual([0, 1]))
@@ -134,32 +134,32 @@ describe('doWhilst', () => {
 
 describe('pipe', () => {
   it('passes the result of each step to the next step', () =>
-    PP.pipe(
+    P.pipe(
       x => x + 1,
-      x => PP.delay(20).then(R.always(x * 2)),
+      x => P.delay(20).then(R.always(x * 2)),
       x => x - 3
     )(5).then(result => expect(result).toBe(9))
   )
 
   it('passes all arguments to the first pipe step', () =>
-    PP.pipe(
+    P.pipe(
       (x, y) => x - y
     )(5, 2).then(result => expect(result).toBe(3))
   )
 
   it('resolves any Promises in the arguments', () =>
-    PP.pipe(
+    P.pipe(
       (x, y) => x + y,
-      x => PP.delay(20).then(R.always(x * 2)),
+      x => P.delay(20).then(R.always(x * 2)),
       x => x - 3
     )(
-      PP.delay(20).then(R.always(5)),
-      PP.delay(20).then(R.always(2))
+      P.delay(20).then(R.always(5)),
+      P.delay(20).then(R.always(2))
     ).then(result => expect(result).toBe(11))
   )
 
   it('exits after the first failed Promise', () =>
-    expect(PP.pipe(
+    expect(P.pipe(
       R.T,
       () => Promise.reject('failure'),
       fail
@@ -169,14 +169,14 @@ describe('pipe', () => {
 
 describe('retry', () => {
   it('throws if times is a non-number', () => {
-    expect(() => PP.retry()).toThrow()
-    expect(() => PP.retry(null, R.identity)).toThrow()
-    expect(() => PP.retry('5', R.identity)).toThrow()
+    expect(() => P.retry()).toThrow()
+    expect(() => P.retry(null, R.identity)).toThrow()
+    expect(() => P.retry('5', R.identity)).toThrow()
   })
 
   it('attempts the operation times times before rejecting', () => {
     const alwaysReject = jest.fn(R.always(Promise.reject('failure')))
-    return PP.retry(
+    return P.retry(
       { times: 5 },
       alwaysReject
     ).then(fail).catch(err => {
@@ -193,7 +193,7 @@ describe('retry', () => {
         : Promise.resolve('success')
     })())
 
-    return PP.retry(
+    return P.retry(
       { times: 5 },
       succeedOnThirdTry
     ).then(result => {
@@ -213,7 +213,7 @@ describe('retry', () => {
 
     const now = Date.now()
 
-    return PP.retry(
+    return P.retry(
       { times, interval },
       x => Promise.reject('failure')
     ).then(fail).catch(err => {
@@ -224,7 +224,7 @@ describe('retry', () => {
 
   it('works with synchronous tasks', () => {
     const alwaysThrow = jest.fn(msg => { throw new Error(msg) })
-    return PP.retry(
+    return P.retry(
       { times: 5 },
       x => alwaysThrow('failure')
     ).then(fail).catch(err => {
@@ -241,7 +241,7 @@ describe('delay', () => {
   it('waits for the specified duration', () => {
     const start = Date.now()
     const duration = 500
-    return PP.delay(duration)
+    return P.delay(duration)
       .then(() => expect(Date.now() - start).toBeWithinError(duration, 10))
   })
 })
@@ -255,26 +255,105 @@ describe('bindOwn', () => {
   }
 
   it('is curried', () =>
-    expect(PP.bindOwn('foo')(object)()).toBe(value)
+    expect(P.bindOwn('foo')(object)()).toBe(value)
   )
 
   it('throws if the property isn\'t a string, number or Symbol', () => {
-    expect(() => PP.bindOwn(undefined, {})).toThrow()
-    expect(() => PP.bindOwn({}, {})).toThrow()
+    expect(() => P.bindOwn(undefined, {})).toThrow()
+    expect(() => P.bindOwn({}, {})).toThrow()
   })
 
   it('throws if the object is nil', () => {
-    expect(() => PP.bindOwn('foo', null)).toThrow()
-    expect(() => PP.bindOwn('foo', undefined)).toThrow()
+    expect(() => P.bindOwn('foo', null)).toThrow()
+    expect(() => P.bindOwn('foo', undefined)).toThrow()
   })
 
   it('throws if the property is a non-function', () =>
-    expect(() => PP.bindOwn('foo', { foo: 5 })).toThrow()
+    expect(() => P.bindOwn('foo', { foo: 5 })).toThrow()
   )
 
   it('binds the property to the object', () => {
-    const bound = PP.bindOwn('foo', object)
+    const bound = P.bindOwn('foo', object)
     expect(bound()).toBe(value)
+  })
+})
+
+describe('then', () => {
+  it('resolves the promise using the handler', () => {
+    return expect(
+      P.$then(R.concat('foo'))(Promise.resolve('bar'))
+    ).resolves.toBe('foobar')
+  })
+
+  it('handles non-promises', () => {
+    return expect(
+      P.$then(R.concat('foo'))('bar')
+    ).resolves.toBe('foobar')
+  })
+
+  it('throws if the handler is a non-function', () =>
+    expect(() => P.$then('foo')).toThrowError(/must be a function/)
+  )
+})
+
+describe('catch', () => {
+  it('handles the promise rejection using the handler', () => {
+    return expect(
+      P.$catch(R.concat('foo'))(Promise.reject('bar'))
+    ).resolves.toBe('foobar')
+  })
+
+  it('handles non-promises', () => {
+    return expect(P.$catch(fail)('foo')).resolves.toBe('foo')
+  })
+
+  it('throws if the handler is a non-function', () =>
+    expect(() => P.$catch('foo')).toThrowError(/must be a function/)
+  )
+})
+
+describe('channel', () => {
+  it('passes the Promise-wrapped value through the channeling functions', () => {
+    return expect(
+      P.channel(
+        P.$then(x => x + 1),
+        R.tap(x => expect(x).toBeInstanceOf(Promise)),
+        P.$then(R.tap(x => expect(x).toBe(6))),
+
+        P.$then(() => { throw 'foo' }),
+        P.$catch(() => 'bar'),
+        P.branch(
+          R.concat('foo'),
+          R.concat(R.__, 'bell')
+        )
+      )(5)
+    ).resolves.toEqual([ 'foobar', 'barbell' ])
+  })
+
+  const value = {}
+
+  it(`doesn't resolve intermediate values`, () => {
+    return expect(
+      P.channel(
+        P.$then(fail), // handler shouldn't be called
+        P.$then(fail), // handler shouldn't be called
+        P.$catch(x => expect(x).toBe(value)),
+
+        () => Promise.reject('foo'),
+        P.$then(fail), // handler shouldn't be called
+        P.$then(fail), // handler shouldn't be called
+      )(Promise.reject(value))
+    ).rejects.toBe('foo')
+  })
+
+  it('resolves non-Promise return values', () => {
+    return expect(
+      P.channel(
+        P.$then(R.identity),
+        () => value,
+        P.$then(x => expect(x).toBe(value))
+      )()
+    ).resolves.toBeUndefined()
   })
 })
 

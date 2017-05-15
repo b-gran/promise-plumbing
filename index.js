@@ -1,6 +1,7 @@
 const R = require('ramda')
 const L = require('./lib')
-const assert = require('assert')
+
+const _l = console.log.bind(console)
 
 // Given a function f that may or may not return a Promise, returns a Promise-returning
 // function which returns a Promise that resolves to the return value of f
@@ -148,3 +149,40 @@ const bindOwn = R.curry(
   )((property, object) => object[property].bind(object))
 )
 module.exports.bindOwn = bindOwn
+
+const _resolveIfNonPromise = R.ifElse(R.is(Promise), R.identity, L.resolve)
+
+// Resolves a promise and then calls the function `prop` on the resolved value
+const _resolveAndCallWith = prop => R.converge(
+  R.pipe,
+  [ R.always(_resolveIfNonPromise), R.always(bindOwn(prop)), L.callWith ]
+)
+
+const _isFunctionPrecondition = L.pc(R.is(Function), 'handler must be a function')
+
+const _channelFunc = Symbol('_channelFunc')
+const _markAsChannelFunc = L.setProp(_channelFunc, true)
+
+// Like Promise.prototype.then, but composable and with support for non-promises (via Promise.resolve).
+const $then = L.preconditions(_isFunctionPrecondition)(
+  R.pipe(_resolveAndCallWith('then'), _markAsChannelFunc)
+)
+module.exports.$then = $then
+
+// Like Promise.prototype.catch, but composable and with support for non-promises (via Promise.resolve).
+const $catch = L.preconditions(_isFunctionPrecondition)(
+  R.pipe(_resolveAndCallWith('catch'), _markAsChannelFunc)
+)
+module.exports.$catch = $catch
+
+// Like Ramda.pipe or _.flow, but resolves non-Promise values between steps.
+// Used to create "channels" or "pipelines" using $then and $catch.
+// Ex:
+const channel = R.pipe(
+  R.unapply(R.map(
+    R.converge(R.pipe, [ R.identity, R.always(_resolveIfNonPromise) ])
+  )),
+  R.concat([ _resolveIfNonPromise ]),
+  R.apply(R.pipe)
+)
+module.exports.channel = channel
