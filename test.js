@@ -88,6 +88,12 @@ describe('whilst', () => {
     ).then(result => expect(result).toEqual([1, 2, 3, 4, 5]))
   })
 
+  it('is curried', () => {
+    const whileLengthLt5 = P.whilst(x => P.delay(5).then(R.always(lengthLt5(x))))
+    return whileLengthLt5(x => P.delay(5).then(R.always(lengthPlus1(x))))
+      .then(result => expect(result).toEqual([1, 2, 3, 4, 5]))
+  })
+
   const succeedWhileLengthLt3 = R.either(
     R.compose(R.lt(R.__, 3), R.length),
     R.compose(P.bindOwn('reject', Promise), R.length)
@@ -130,6 +136,12 @@ describe('doWhilst', () => {
       R.compose(R.lt(R.__, 2), R.length)
     ).then(result => expect(result).toEqual([0, 1]))
   )
+
+  it('is curried', () => {
+    const doLength = P.doWhilst(R.length)
+    return doLength(R.compose(R.lt(R.__, 2), R.length))
+      .then(result => expect(result).toEqual([0, 1]))
+  })
 })
 
 describe('pipe', () => {
@@ -310,6 +322,28 @@ describe('catch', () => {
   it('throws if the handler is a non-function', () =>
     expect(() => P.$catch('foo')).toThrowError(/must be a function/)
   )
+})
+
+describe('times', () => {
+  it('does the operation n times', () =>
+    expect(
+      P.times(3)(R.always(Promise.resolve('foo')))
+    ).resolves.toEqual([ 'foo', 'foo', 'foo' ])
+  )
+
+  it('stops if the operation fails', () => {
+    const operation = jest.fn()
+      .mockImplementationOnce(() => {})
+      .mockImplementationOnce(() => {})
+      .mockImplementationOnce(() => Promise.reject('fail'))
+
+    return P.times(5)(operation)
+      .then(fail)
+      .catch(err => {
+        expect(err).toBe('fail')
+        expect(operation).toHaveBeenCalledTimes(3)
+      })
+  })
 })
 
 const _l = console.log.bind(console)

@@ -34,7 +34,7 @@ module.exports.branch = branch
 
 // Does an operation while a test returns true. The test and operation can be
 // asynchronous operations. If either function rejects, exits immediately.
-const whilst = (test, operation) => {
+const whilst = R.curry((test, operation) => {
   const $test = wrap(test)
   const $operation = wrap(operation)
 
@@ -59,7 +59,7 @@ const whilst = (test, operation) => {
       promise.then(bindOwn('next', iterator)).catch(bindOwn('throw', iterator))
     }
   })
-}
+})
 
 module.exports.whilst = whilst
 
@@ -67,10 +67,10 @@ module.exports.whilst = whilst
 // asynchronous operations. If either function rejects, exits immediately.
 // This function always performs the operation at least once --
 // just like the "do while" control structure.
-const doWhilst = (operation, test) => whilst(
+const doWhilst = R.curry((operation, test) => whilst(
   results => R.isEmpty(results) || test(results),
   operation
-)
+))
 module.exports.doWhilst = doWhilst
 
 // Asynchronous version of compose with arguments reversed.
@@ -174,3 +174,15 @@ const $catch = L.preconditions(_isFunctionPrecondition)(
   R.pipe(_resolveAndCallWith('catch'), _markAsChannelFunc)
 )
 module.exports.$catch = $catch
+
+const _isLengthLessThan = R.converge(
+  R.pipe,
+  [
+    R.always(R.length),
+    R.unary(R.flip(R.lt))
+  ]
+)
+
+// Do an operation repeatedly, stopping if the operation fails.
+const times = R.pipe(_isLengthLessThan, whilst)
+module.exports.times = times
