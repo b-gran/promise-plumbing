@@ -312,49 +312,4 @@ describe('catch', () => {
   )
 })
 
-describe('channel', () => {
-  it('passes the Promise-wrapped value through the channeling functions', () => {
-    return expect(
-      P.channel(
-        P.$then(x => x + 1),
-        R.tap(x => expect(x).toBeInstanceOf(Promise)),
-        P.$then(R.tap(x => expect(x).toBe(6))),
-
-        P.$then(() => { throw 'foo' }),
-        P.$catch(() => 'bar'),
-        P.branch(
-          R.concat('foo'),
-          R.concat(R.__, 'bell')
-        )
-      )(5)
-    ).resolves.toEqual([ 'foobar', 'barbell' ])
-  })
-
-  const value = {}
-
-  it(`doesn't resolve intermediate values`, () => {
-    return expect(
-      P.channel(
-        P.$then(fail), // handler shouldn't be called
-        P.$then(fail), // handler shouldn't be called
-        P.$catch(x => expect(x).toBe(value)),
-
-        () => Promise.reject('foo'),
-        P.$then(fail), // handler shouldn't be called
-        P.$then(fail), // handler shouldn't be called
-      )(Promise.reject(value))
-    ).rejects.toBe('foo')
-  })
-
-  it('resolves non-Promise return values', () => {
-    return expect(
-      P.channel(
-        P.$then(R.identity),
-        () => value,
-        P.$then(x => expect(x).toBe(value))
-      )()
-    ).resolves.toBeUndefined()
-  })
-})
-
 const _l = console.log.bind(console)

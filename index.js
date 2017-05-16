@@ -174,15 +174,3 @@ const $catch = L.preconditions(_isFunctionPrecondition)(
   R.pipe(_resolveAndCallWith('catch'), _markAsChannelFunc)
 )
 module.exports.$catch = $catch
-
-// Like Ramda.pipe or _.flow, but resolves non-Promise values between steps.
-// Used to create "channels" or "pipelines" using $then and $catch.
-// Ex:
-const channel = R.pipe(
-  R.unapply(R.map(
-    R.converge(R.pipe, [ R.identity, R.always(_resolveIfNonPromise) ])
-  )),
-  R.concat([ _resolveIfNonPromise ]),
-  R.apply(R.pipe)
-)
-module.exports.channel = channel
