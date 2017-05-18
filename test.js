@@ -181,7 +181,6 @@ describe('pipe', () => {
 
 describe('retry', () => {
   it('throws if times is a non-number', () => {
-    expect(() => P.retry()).toThrow()
     expect(() => P.retry(null, R.identity)).toThrow()
     expect(() => P.retry('5', R.identity)).toThrow()
   })

@@ -12,14 +12,12 @@ const wrap = R.compose(
 module.exports.wrap = wrap
 
 // A Promise that is fulfilled after some number of milliseconds.
-const delay = L.preconditions(
-  L.pc(R.is(Number), 'the duration must be a number')
-)(
-  duration => new Promise(resolve => setTimeout(
+const delay = L.preconditions
+  (L.must(R.is(Number), 'the duration must be a number'))
+  (duration => new Promise(resolve => setTimeout(
     () => resolve(),
     R.is(Number, duration) ? Math.max(duration, 0) : 0
-  ))
-)
+  )))
 module.exports.delay = delay
 
 // Passes a MaybePromise to a list of branching functions and resolves
@@ -93,10 +91,9 @@ const _isHeadFailure = R.compose(R.equals(_failure), R.head)
 // An operation "fails" if either
 //   1) the operation is synchronous and it throws
 //   2) the operation is a Promise and it is rejected
-const retry = L.preconditions(
-  L.pc(R.propSatisfies(R.is(Number), 'times'), 'times must be a number')
-)(
-  ({ times, interval }, task) => {
+const retry = R.curry(L.preconditions
+  (L.must(R.propSatisfies(R.is(Number), 'times'), 'times must be a number'))
+  (({ times, interval }, task) => {
     const backoff = interval ?
       // If an interval is provided, do the operation instantly on
       // the 0th try and delay for every other try.
@@ -127,26 +124,27 @@ const retry = L.preconditions(
       R.ifElse(_isHeadFailure, R.compose(L.reject, R.last), R.last),
       R.last
     ))
-  }
+  })
 )
 module.exports.retry = retry
 
 // A helper function that binds a function property of an object to the object.
-const bindOwn = R.curry(
-  L.preconditions(
-    L.pc(
+const bindOwn = R.curry(L.preconditions
+  (
+    L.must(
       R.compose(L.isStringRepresentable, R.nthArg(0)),
       'property must be a string, number, or Symbol'
     ),
-    L.pc(R.compose(L.isDefined, R.nthArg(1)), 'the object must be non-nil'),
-    L.pc(
+    L.must(R.compose(L.isDefined, R.nthArg(1)), 'the object must be non-nil'),
+    L.must(
       R.converge(
         R.call,
         [ R.compose(R.prop, R.nthArg(0)), R.nthArg(1) ]
       ),
       'the property must be a function'
     )
-  )((property, object) => object[property].bind(object))
+  )
+  ((property, object) => object[property].bind(object))
 )
 module.exports.bindOwn = bindOwn
 
@@ -158,21 +156,19 @@ const _resolveAndCallWith = prop => R.converge(
   [ R.always(_resolveIfNonPromise), R.always(bindOwn(prop)), L.callWith ]
 )
 
-const _isFunctionPrecondition = L.pc(R.is(Function), 'handler must be a function')
-
-const _channelFunc = Symbol('_channelFunc')
-const _markAsChannelFunc = L.setProp(_channelFunc, true)
+const _isFunctionPrecondition = L.must(R.is(Function), 'handler must be a function')
 
 // Like Promise.prototype.then, but composable and with support for non-promises (via Promise.resolve).
-const $then = L.preconditions(_isFunctionPrecondition)(
-  R.pipe(_resolveAndCallWith('then'), _markAsChannelFunc)
-)
+// Unlike Promise.prototype.then, only accepts a single argument.
+const $then = L.preconditions
+  (_isFunctionPrecondition)
+  (_resolveAndCallWith('then'))
 module.exports.$then = $then
 
 // Like Promise.prototype.catch, but composable and with support for non-promises (via Promise.resolve).
-const $catch = L.preconditions(_isFunctionPrecondition)(
-  R.pipe(_resolveAndCallWith('catch'), _markAsChannelFunc)
-)
+const $catch = L.preconditions
+  (_isFunctionPrecondition)
+  (_resolveAndCallWith('catch'))
 module.exports.$catch = $catch
 
 const _isLengthLessThan = R.converge(

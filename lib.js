@@ -26,10 +26,10 @@ const l = R.bind(console.log, console)
 module.exports.l = l
 
 // Shorthand for wrapping a predicate and message as a tuple
-const pc = (predicate, message) => [ predicate, message ]
-module.exports.pc = pc
+const must = (predicate, message) => [ predicate, message ]
+module.exports.must = must
 
-// Returns a failure message for a pc
+// Returns a failure message for a must
 const failureMessage = R.either(R.last, R.always('failed precondition'))
 
 // Passes function arguments through a list of predicates
