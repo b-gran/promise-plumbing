@@ -1,5 +1,6 @@
 const R = require('ramda')
 const L = require('./lib')
+const Either = require('ramda-fantasy').Either
 
 const _l = console.log.bind(console)
 
@@ -65,6 +66,8 @@ module.exports.whilst = whilst
 // asynchronous operations. If either function rejects, exits immediately.
 // This function always performs the operation at least once --
 // just like the "do while" control structure.
+// doWhilst :: (Array a -> Async a) -> (Array a -> Async Boolean) -> Promise Array a
+// doWhilst (operation, test)
 const doWhilst = R.curry((operation, test) => whilst(
   results => R.isEmpty(results) || test(results),
   operation
@@ -84,8 +87,13 @@ const pipe = (...functions) => (...args) => Promise
   ))
 module.exports.pipe = pipe
 
-const _failure = L.symbolFallback('failure')
-const _isHeadFailure = R.compose(R.equals(_failure), R.head)
+const _isLengthLessThan = R.converge(
+  R.pipe,
+  [
+    R.always(R.length),
+    R.unary(R.flip(R.lt))
+  ]
+)
 
 // Retry an operation some number of times before reporting failure.
 // An operation "fails" if either
@@ -93,37 +101,25 @@ const _isHeadFailure = R.compose(R.equals(_failure), R.head)
 //   2) the operation is a Promise and it is rejected
 const retry = R.curry(L.preconditions
   (L.must(R.propSatisfies(R.is(Number), 'times'), 'times must be a number'))
+
   (({ times, interval }, task) => {
-    const backoff = interval ?
-      // If an interval is provided, do the operation instantly on
-      // the 0th try and delay for every other try.
-      R.ifElse(
-        R.equals(0),
-        R.always(wrap),
-        nthTry => f => () => delay(interval(nthTry)).then(f)
-      ) :
-      // If no interval is provided, never delay.
-      R.always(wrap)
+    // If an interval is provided, do the operation instantly on
+    // the 0th try and delay for every other try.
+    const wait = R.isNil(interval) ?
+      R.tap :
+      R.ifElse(R.equals(0),
+        R.always(R.tap),
+        R.pipe(interval, delay)
+      )
+
+    const delayTask = R.pipe(
+      wrap(R.pipe(R.length, wait)),
+      $then(wrap(task)))
 
     return doWhilst(
-      // Do the task and always have a fulfilment tuple of
-      //    [ maybeFailed, result ]
-      // where maybeFailed is the failure symbol if the operation failed.
-      // This way, the task can return an Error or a falsey or nil value.
-      x => backoff(R.length(x))(task)()
-        .then(result => [ null, result ])
-        .catch(err => [ _failure, err ]),
-
-      // Continue while the latest operation failed and we
-      // haven't done it "times" times
-      R.allPass([
-        R.compose(_isHeadFailure, R.last),
-        R.compose(R.gt(times), R.length)
-      ])
-    ).then(R.compose(
-      R.ifElse(_isHeadFailure, R.compose(L.reject, R.last), R.last),
-      R.last
-    ))
+      R.pipe(delayTask, $then(Either.Right), $catch(Either.Left)),
+      R.allPass([ R.pipe(R.last, Either.isLeft), _isLengthLessThan(times) ])
+    ).then(R.pipe(R.last, Either.either(L.reject, L.resolve)))
   })
 )
 module.exports.retry = retry
@@ -170,14 +166,6 @@ const $catch = L.preconditions
   (_isFunctionPrecondition)
   (_resolveAndCallWith('catch'))
 module.exports.$catch = $catch
-
-const _isLengthLessThan = R.converge(
-  R.pipe,
-  [
-    R.always(R.length),
-    R.unary(R.flip(R.lt))
-  ]
-)
 
 // Do an operation repeatedly, stopping if the operation fails.
 const times = R.pipe(_isLengthLessThan, whilst)
