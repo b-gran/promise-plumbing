@@ -95,6 +95,8 @@ const _isLengthLessThan = R.converge(
   ]
 )
 
+const _isLastFailure = R.pipe(R.last, Either.isLeft)
+
 // Retry an operation some number of times before reporting failure.
 // An operation "fails" if either
 //   1) the operation is synchronous and it throws
@@ -103,22 +105,17 @@ const retry = R.curry(L.preconditions
   (L.must(R.propSatisfies(R.is(Number), 'times'), 'times must be a number'))
 
   (({ times, interval }, task) => {
-    // If an interval is provided, do the operation instantly on
-    // the 0th try and delay for every other try.
-    const wait = R.isNil(interval) ?
-      R.tap :
-      R.ifElse(R.equals(0),
-        R.always(R.tap),
-        R.pipe(interval, delay)
-      )
-
-    const delayTask = R.pipe(
-      wrap(R.pipe(R.length, wait)),
-      $then(wrap(task)))
+    const delayTask = R.isNil(interval) ? wrap(task) :
+      R.pipe(
+        R.length,
+        R.ifElse(R.equals(0))
+          (R.always(R.tap)) // just do the task on the first try
+          (R.pipe(interval, delay)), // afterward, delay first
+        $then(task))
 
     return doWhilst(
       R.pipe(delayTask, $then(Either.Right), $catch(Either.Left)),
-      R.allPass([ R.pipe(R.last, Either.isLeft), _isLengthLessThan(times) ])
+      R.allPass([ _isLastFailure, _isLengthLessThan(times) ])
     ).then(R.pipe(R.last, Either.either(L.reject, L.resolve)))
   })
 )
